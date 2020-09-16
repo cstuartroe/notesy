@@ -1,0 +1,35 @@
+{
+  "name": "notesy",
+  "version": "1.0.0",
+  "description": "A web application to practice piano sight reading",
+  "main": "index.js",
+  "scripts": {
+    "dev": "webpack --mode development ./src/App.js --output ./static/js/main.js",
+    "build": "webpack --mode production ./src/App.js --output ./static/js/main.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cstuartroe/notesy.git"
+  },
+  "author": "Conor Stuart-Roe",
+  "license": "ISC",
+  "dependencies": {
+    "@babel/core": "^7.11.6",
+    "@babel/preset-env": "^7.11.5",
+    "@babel/preset-react": "^7.10.4",
+    "babel-loader": "^8.1.0",
+    "babel-plugin-transform-class-properties": "^6.24.1",
+    "css-loader": "^4.3.0",
+    "fibers": "^5.0.0",
+    "node-sass": "^4.14.1",
+    "prop-types": "^15.7.2",
+    "react": "^16.13.1",
+    "react-dom": "^16.13.1",
+    "react-sheet-music": "0.0.1",
+    "sass": "^1.26.10",
+    "sass-loader": "^10.0.2",
+    "style-loader": "^1.2.1",
+    "webpack": "^4.44.1",
+    "webpack-cli": "^3.3.12"
+  }
+}
