@@ -1,5 +1,6 @@
 #paper {
   text-align: center;
+  overflow: visible !important;
 }
 
 #paper svg {
@@ -12,4 +13,27 @@
 
 button  {
   display: inline-block;
+}
+
+.options, .option, .button {
+  padding: 10px;
+  border: 1px solid black;
+  border-radius: 10px;
+}
+
+.optionTitle {
+  font-size: 150%;
+}
+
+.option, .button {
+  cursor: pointer;
+  margin: 10px 0;
+}
+
+.option-selected {
+  background-color: #6cc5ef;
+}
+
+svg {
+  overflow: visible;
 }
