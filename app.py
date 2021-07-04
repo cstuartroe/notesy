@@ -1,4 +1,7 @@
-from flask import Flask, send_file
+from flask import Flask, send_file, request
+import mido
+import io
+import pdb
 
 app = Flask(__name__)
 
@@ -22,6 +25,16 @@ def get_js(filename):
 @app.route('/')
 def index():
     return send_file("index.html")
+
+
+@app.route('/midi_upload', methods=["POST"])
+def midi_upload():
+    for b in request.files["file"].read():
+        print(int(b))
+    # with open("tmp.mid", "wb") as fh:
+    #     request.files["file"].save(fh)
+    # for msg in mido.MidiFile("tmp.mid"):
+    #     print(msg)
 
 
 if __name__ == '__main__':

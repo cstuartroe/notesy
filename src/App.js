@@ -4,7 +4,8 @@ import SheetMusic from 'react-sheet-music';
 
 import "../static/scss/main.scss";
 import Options, { keyPossibilitiesOptions, noteDurationsOptions } from "./Options";
-import * as constants from './constants'
+import * as constants from './constants';
+import FileUploader from "./FileUploader";
 
 const headers = ["Event type", "Note", "Velocity"];
 
@@ -200,6 +201,8 @@ class App extends Component {
           <p>Notesy can't gain access to your MIDI inputs right now. Make sure you are using Google Chrome
           and connecting to Notesy over an HTTPS connection.</p> : null
         }
+
+        <FileUploader/>
 
         <div className="button" onClick={this.restart.bind(this)}>New sheet</div>
 
