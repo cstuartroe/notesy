@@ -3,37 +3,66 @@ import ReactDOM from "react-dom";
 import SheetMusic from 'react-sheet-music';
 
 import "../static/scss/main.scss";
-import Options, { keyPossibilitiesOptions, noteDurationsOptions } from "./Options";
+import OptionsChooser, { Option, OptionsMenuInfo, menuInfo } from "./Options";
 import * as constants from './constants'
+import {
+  MidiMessage,
+  Note,
+  playableKey, RawMidiMessage,
+} from "./constants";
 
-const headers = ["Event type", "Note", "Velocity"];
+const defaultMenuValues: {[K in keyof typeof menuInfo]: (typeof menuInfo)[K]['options'][0]} = {
+  noteRange: menuInfo.noteRange.options[0],
+  keyPossibilities: menuInfo.keyPossibilities.options[0],
+  noteDurations: menuInfo.noteDurations.options[0],
+}
 
 const pieceLength = 32;
 
-class App extends Component {
-  state = {
-    inputs: [],
-    key: null,
-    notes: [],
-    position: null,
-    showTable: false,
-    keysPressed: null,
-    correctPresses: null,
-    startTime: null,
-    finishTime: null,
-    finished: false,
-    noteRange: 9,
-    keyPossibilities: keyPossibilitiesOptions[0].value,
-    noteDurations: noteDurationsOptions[0].value,
-    connectionError: false
-  };
+type MidiInputDevice = {
+  onmidimessage: (m: RawMidiMessage) => void
+};
+
+type MidiConnection = {
+  inputs: MidiInputDevice[],
+  onstatechange: () => void,
+}
+
+type State = {
+  inputs: MidiInputDevice[],
+  key: playableKey,
+  notes: Note[],
+  position: number,
+  showTable: boolean,
+  keysPressed: number,
+  correctPresses: number,
+  startTime: number,
+  finishTime: number,
+  finished: boolean,
+  connectionError: boolean,
+} & typeof defaultMenuValues;
+
+class App extends Component<{}, State> {
+  constructor(props: {}) {
+    super(props);
+    this.state = {
+      inputs: [],
+      key: "C",
+      notes: [],
+      position: 0,
+      showTable: false,
+      keysPressed: 0,
+      correctPresses: 0,
+      startTime: 0,
+      finishTime: 0,
+      finished: false,
+      connectionError: false,
+      ...defaultMenuValues,
+    };
+  }
 
   componentDidMount() {
-    try {
-      this.setupInputs();
-    } catch (err) {
-      this.setState({connectionError: true})
-    }
+    this.setupInputs();
     this.restart();
   }
 
@@ -50,8 +79,9 @@ class App extends Component {
   }
 
   setupInputs() {
+    // @ts-ignore
     navigator.requestMIDIAccess()
-      .then(a => {
+      .then((a: MidiConnection) => {
         a.onstatechange = () => {
           this.setState({inputs: a.inputs});
           a.inputs.forEach(input => {
@@ -60,14 +90,15 @@ class App extends Component {
         }
         a.onstatechange();
       })
-      .catch(reason => this.setState({connectionError: true}));
+      .catch((_: any) => this.setState({connectionError: true}));
   }
 
-  onMidiMessage(message) {
+  onMidiMessage(message: RawMidiMessage) {
     let messageInfo = this.interpretMessage(message);
     if (messageInfo === null || this.state.finished) { return; }
 
-    const newState = {};
+    let newState: Partial<State> = {};
+
     if (messageInfo.eventType === "NOTE_ON") {
       newState.keysPressed = this.state.keysPressed + 1;
       let standardPitch = this.toStandardPitch(this.state.notes[this.state.position].pitch);
@@ -81,21 +112,21 @@ class App extends Component {
       }
     }
 
-    this.setState(newState);
+    this.setState({...this.state, ...newState});
   }
 
-  interpretMessage(message) {
+  interpretMessage(message: RawMidiMessage): MidiMessage | null {
     if (!(message.data[0] in constants.keyEventCodes)) { return null; }
 
     return {
       eventType: constants.keyEventCodes[message.data[0]],
       pitch: message.data[1],
       velocity: message.data[2],
-      timeStamp: Math.floor(message.timeStamp)
+      timestamp: Math.floor(message.timeStamp)
     }
   }
 
-  toStandardPitch(pitch) {
+  toStandardPitch(pitch: number): number {
     let octave = Math.floor(pitch/7) + 3;
     let inC = octave*12 + constants.majorScale[pitch%7];
     let adjustment = constants.keyAdjustments[this.state.key][pitch%7];
@@ -104,21 +135,24 @@ class App extends Component {
 
   setKey() {
     let { keyPossibilities } = this.state;
-    this.setState({key: keyPossibilities[constants.randrange(keyPossibilities.length)]});
+    this.setState({key: constants.randelem(keyPossibilities.value)});
   }
 
   createNotes() {
-    const notes = [];
+    const notes: Note[] = [];
     let beatsElapsed = 0;
     let { noteDurations } = this.state;
 
-    let lastNote = constants.makeNote(this.randomPitch());
+    let lastNote = constants.makeNote({
+      pitch: this.randomPitch(),
+      duration: constants.randelem(noteDurations.value),
+    });
     notes.push(lastNote);
     beatsElapsed += lastNote.duration;
 
     while (beatsElapsed < pieceLength) {
-      let duration = Math.min(noteDurations[constants.randrange(noteDurations.length)], 4 - (beatsElapsed % 4));
-      let note = constants.makeNote(this.nextPitch(lastNote.pitch), duration);
+      let duration = Math.min(constants.randelem(noteDurations.value), 4 - (beatsElapsed % 4));
+      let note = constants.makeNote({pitch: this.nextPitch(lastNote.pitch), duration});
       notes.push(note);
       lastNote = note;
       beatsElapsed += lastNote.duration;
@@ -128,18 +162,18 @@ class App extends Component {
   }
 
   randomPitch() {
-    return constants.startingNote(this.state.noteRange) + constants.randrange(this.state.noteRange);
+    return constants.startingNote(this.state.noteRange.value) + constants.randrange(this.state.noteRange.value);
   }
 
-  nextPitch(pitch) {
+  nextPitch(pitch: number): number {
     const choice = constants.randrange(7);
     let out = (choice >= 5) ?
         pitch - 7 + constants.randrange(15)
         :
         pitch - 2 + choice;
 
-    let sn = constants.startingNote(this.state.noteRange);
-    if ((out < sn) || (out >= sn + this.state.noteRange)) {
+    let sn = constants.startingNote(this.state.noteRange.value);
+    if ((out < sn) || (out >= sn + this.state.noteRange.value)) {
       return this.nextPitch(pitch);
     } else {
       return out;
@@ -167,6 +201,20 @@ class App extends Component {
 
     return notation;
   }
+
+  optionsChooser(field: keyof typeof defaultMenuValues) {
+    type T = (typeof defaultMenuValues)[typeof field]['value'];
+
+    const current: Option<T> = this.state[field];
+    const options: OptionsMenuInfo<T> = menuInfo[field];
+    const update = (p: Option<T>) => {
+      this.setState({...this.state, [field]: p});
+      this.restart();
+    }
+
+    return <OptionsChooser {...{current, options, update}}/>;
+  }
+
 
   render() {
     let accuracy = this.state.correctPresses/this.state.keysPressed;
@@ -204,9 +252,9 @@ class App extends Component {
         <div className="button" onClick={this.restart.bind(this)}>New sheet</div>
 
         <div className="row">
-          <Options name="noteRange" parent={this}/>
-          <Options name="keyPossibilities" parent={this}/>
-          <Options name="noteDurations" parent={this}/>
+          {this.optionsChooser('noteRange')}
+          {this.optionsChooser('keyPossibilities')}
+          {this.optionsChooser('noteDurations')}
         </div>
       </div>
     );

@@ -4,9 +4,8 @@
   "description": "A web application to practice piano sight reading",
   "main": "index.js",
   "scripts": {
-    "dev": "webpack --mode development ./src/App.js --output ./static/js/main.js",
-    "build": "webpack --mode production ./src/App.js --output ./static/js/main.js",
-    "start": "webpack --mode production ./src/App.js --output ./static/js/main.js"
+    "dev": "./node_modules/webpack-cli/bin/cli.js --mode development ./src/App.tsx -o ./static/js",
+    "build": "./node_modules/webpack-cli/bin/cli.js --mode production ./src/App.tsx -o ./static/js"
   },
   "repository": {
     "type": "git",
@@ -14,23 +13,31 @@
   },
   "author": "Conor Stuart-Roe",
   "license": "ISC",
+  "eslintConfig": {
+    "extends": [
+      "react-app",
+      "react-app/jest"
+    ]
+  },
   "dependencies": {
-    "@babel/core": "^7.11.6",
-    "@babel/preset-env": "^7.11.5",
-    "@babel/preset-react": "^7.10.4",
-    "babel-loader": "^8.1.0",
-    "babel-plugin-transform-class-properties": "^6.24.1",
-    "css-loader": "^4.3.0",
-    "fibers": "^5.0.0",
-    "node-sass": "^4.14.1",
-    "prop-types": "^15.7.2",
-    "react": "^16.13.1",
-    "react-dom": "^16.13.1",
-    "react-sheet-music": "0.0.1",
-    "sass": "^1.26.10",
-    "sass-loader": "^10.0.2",
-    "style-loader": "^1.2.1",
-    "webpack": "^4.44.1",
-    "webpack-cli": "^3.3.12"
+    "@fortawesome/fontawesome-svg-core": "^1.2.35",
+    "@fortawesome/free-solid-svg-icons": "^5.15.3",
+    "@fortawesome/react-fontawesome": "^0.1.14",
+    "@types/node": "^15.0.0",
+    "@types/react": "^17.0.4",
+    "@types/react-dom": "^17.0.3",
+    "@types/react-router-dom": "^5.1.7",
+    "css-loader": "^5.2.4",
+    "react": "^17.0.2",
+    "react-dom": "^17.0.2",
+    "react-router-dom": "^5.2.0",
+    "react-sheet-music": "^0.0.1",
+    "sass": "^1.32.11",
+    "sass-loader": "^11.0.1",
+    "style-loader": "^2.0.0",
+    "ts-loader": "^9.1.1",
+    "typescript": "^4.2.4",
+    "webpack": "^5.36.0",
+    "webpack-cli": "^4.6.0"
   }
 }
