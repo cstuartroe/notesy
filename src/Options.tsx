@@ -26,7 +26,7 @@ const keyPossibilitiesMenuInfo: OptionsMenuInfo<playableKey[]> = {
   options: [
     {title: "C", value: ["C"]},
     {title: "F, C, G, D, A", value: ["F", "C", "G", "D", "A"]},
-    {title: "All keys", value: playableKeys},
+    {title: "All keys", value: [...playableKeys]},
   ],
 };
 
@@ -39,36 +39,44 @@ const noteDurationsMenuInfo: OptionsMenuInfo<number[]> = {
   ],
 };
 
+const maxVoicesMenuInfo: OptionsMenuInfo<number> = {
+  title: "Maximum Voices",
+  options: [
+    {title: "1", value: 1},
+    {title: "2", value: 2},
+    {title: "3", value: 3},
+  ]
+}
+
 export const menuInfo = {
   noteRange: noteRangeMenuInfo,
   keyPossibilities: keyPossibilitiesMenuInfo,
   noteDurations: noteDurationsMenuInfo,
+  maxVoices: maxVoicesMenuInfo,
 };
 
 type Props<T> = {
-  current: Option<T>,
+  current: T,
   options: OptionsMenuInfo<T>,
-  update: (t: Option<T>) => void,
+  update: (t: T) => void,
 }
 
-class OptionsChooser<T> extends Component<Props<T>> {
-  render() {
-    let { current, options, update } = this.props;
-
-    return (
-      <div className="col-12 col-md-6 col-lg-4"><div className="options">
+function OptionsChooser<T>({ current, options, update }: Props<T>) {
+  return (
+    <div className="col-12 col-md-6 col-lg-4">
+      <div className="options">
         <div className="optionTitle">{options.title}</div>
         {options.options.map((choice, i) =>
-          <div key={i}
-               className={"option" +
-               (choice.value === current.value ? " option-selected" : "")}
-               onClick={() => update(choice)}>
+            <div key={i}
+                 className={"option" +
+                 (choice.value === current ? " option-selected" : "")}
+                 onClick={() => choice.value != current ? update(choice.value) : null}>
               {choice.title}
-          </div>
+            </div>
         )}
-      </div></div>
-    );
-  }
+      </div>
+    </div>
+  );
 }
 
 export default OptionsChooser;

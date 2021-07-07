@@ -4,17 +4,26 @@ import SheetMusic from 'react-sheet-music';
 
 import "../static/scss/main.scss";
 import OptionsChooser, { Option, OptionsMenuInfo, menuInfo } from "./Options";
-import * as constants from './constants'
 import {
+  keyEventCodes,
+  toAbcCluster,
+  randElem,
+  startingNote,
+  RawMidiMessage,
   MidiMessage,
-  Note,
-  playableKey, RawMidiMessage,
+  NoteCluster,
+  playableKey,
+  toMidiNumber,
+  inKeyAccidental,
+  randInt,
+  eqSet,
 } from "./constants";
 
-const defaultMenuValues: {[K in keyof typeof menuInfo]: (typeof menuInfo)[K]['options'][0]} = {
-  noteRange: menuInfo.noteRange.options[0],
-  keyPossibilities: menuInfo.keyPossibilities.options[0],
-  noteDurations: menuInfo.noteDurations.options[0],
+const defaultMenuValues: {[K in keyof typeof menuInfo]: (typeof menuInfo)[K]['options'][0]['value']} = {
+  noteRange: menuInfo.noteRange.options[0].value,
+  keyPossibilities: menuInfo.keyPossibilities.options[0].value,
+  noteDurations: menuInfo.noteDurations.options[0].value,
+  maxVoices: menuInfo.maxVoices.options[0].value,
 }
 
 const pieceLength = 32;
@@ -31,15 +40,15 @@ type MidiConnection = {
 type State = {
   inputs: MidiInputDevice[],
   key: playableKey,
-  notes: Note[],
+  clusters: NoteCluster[],
   position: number,
   showTable: boolean,
   keysPressed: number,
   correctPresses: number,
   startTime: number,
-  finishTime: number,
-  finished: boolean,
+  finishTime: number | null,
   connectionError: boolean,
+  currentlyPressedMidiNumbers: Set<number>,
 } & typeof defaultMenuValues;
 
 class App extends Component<{}, State> {
@@ -48,15 +57,15 @@ class App extends Component<{}, State> {
     this.state = {
       inputs: [],
       key: "C",
-      notes: [],
+      clusters: [],
       position: 0,
       showTable: false,
       keysPressed: 0,
       correctPresses: 0,
       startTime: 0,
-      finishTime: 0,
-      finished: false,
+      finishTime: null,
       connectionError: false,
+      currentlyPressedMidiNumbers: new Set(),
       ...defaultMenuValues,
     };
   }
@@ -67,15 +76,14 @@ class App extends Component<{}, State> {
   }
 
   restart() {
-    this.setKey();
-    this.createNotes();
     this.setState({
+      key: this.randKey(),
       startTime: Date.now(),
       position: 0,
       keysPressed: 0,
       correctPresses: 0,
-      finished: false
-    });
+      finishTime: null,
+    }, this.createNotes.bind(this));
   }
 
   setupInputs() {
@@ -95,105 +103,140 @@ class App extends Component<{}, State> {
 
   onMidiMessage(message: RawMidiMessage) {
     let messageInfo = this.interpretMessage(message);
-    if (messageInfo === null || this.state.finished) { return; }
+    if (messageInfo == null || this.state.finishTime != null) { return; }
 
-    let newState: Partial<State> = {};
+    let { keysPressed, currentlyPressedMidiNumbers } = this.state;
 
     if (messageInfo.eventType === "NOTE_ON") {
-      newState.keysPressed = this.state.keysPressed + 1;
-      let standardPitch = this.toStandardPitch(this.state.notes[this.state.position].pitch);
-      if (standardPitch === messageInfo.pitch) {
-        newState.correctPresses = this.state.correctPresses + 1;
-        newState.position = this.state.position + 1;
-        if (newState.position === this.state.notes.length) {
-          newState.finished = true;
-          newState.finishTime = Date.now();
-        }
-      }
+      keysPressed += 1;
+      currentlyPressedMidiNumbers.add(messageInfo.noteNumber);
+    } else if (messageInfo.eventType == "NOTE_OFF") {
+      currentlyPressedMidiNumbers.delete(messageInfo.noteNumber);
     }
 
-    this.setState({...this.state, ...newState});
+    this.setState({keysPressed, currentlyPressedMidiNumbers}, this.checkIfContinue.bind(this));
+  }
+
+  checkIfContinue() {
+    let { clusters, currentlyPressedMidiNumbers, correctPresses, position } = this.state;
+
+    const currentClusterMidiNumbers: Set<number> = new Set(clusters[position].notes.map(note => toMidiNumber(note)));
+    const correctNotesPressed = eqSet(currentClusterMidiNumbers, currentlyPressedMidiNumbers);
+
+    if (correctNotesPressed) {
+      this.setState({
+        correctPresses: correctPresses + currentClusterMidiNumbers.size,
+        position: position + 1,
+        finishTime: position + 1 >= clusters.length ? Date.now() : null,
+        currentlyPressedMidiNumbers: new Set(),
+      })
+    }
   }
 
   interpretMessage(message: RawMidiMessage): MidiMessage | null {
-    if (!(message.data[0] in constants.keyEventCodes)) { return null; }
+    if (!(message.data[0] in keyEventCodes)) { return null; }
 
     return {
-      eventType: constants.keyEventCodes[message.data[0]],
-      pitch: message.data[1],
+      eventType: keyEventCodes[message.data[0]],
+      noteNumber: message.data[1],
       velocity: message.data[2],
       timestamp: Math.floor(message.timeStamp)
     }
   }
 
-  toStandardPitch(pitch: number): number {
-    let octave = Math.floor(pitch/7) + 3;
-    let inC = octave*12 + constants.majorScale[pitch%7];
-    let adjustment = constants.keyAdjustments[this.state.key][pitch%7];
-    return inC + adjustment;
-  }
-
-  setKey() {
-    let { keyPossibilities } = this.state;
-    this.setState({key: constants.randelem(keyPossibilities.value)});
+  randKey() {
+    return randElem(this.state.keyPossibilities);
   }
 
   createNotes() {
-    const notes: Note[] = [];
+    const clusters: NoteCluster[] = [];
     let beatsElapsed = 0;
-    let { noteDurations } = this.state;
 
-    let lastNote = constants.makeNote({
-      pitch: this.randomPitch(),
-      duration: constants.randelem(noteDurations.value),
-    });
-    notes.push(lastNote);
-    beatsElapsed += lastNote.duration;
+    let lastCluster = this.randomCluster();
+    clusters.push(lastCluster);
+    beatsElapsed += lastCluster.duration;
 
     while (beatsElapsed < pieceLength) {
-      let duration = Math.min(constants.randelem(noteDurations.value), 4 - (beatsElapsed % 4));
-      let note = constants.makeNote({pitch: this.nextPitch(lastNote.pitch), duration});
-      notes.push(note);
-      lastNote = note;
-      beatsElapsed += lastNote.duration;
+      let cluster = this.nextCluster(lastCluster);
+      if (cluster.duration <= 4 - (beatsElapsed % 4)) {
+        clusters.push(cluster);
+        lastCluster = cluster;
+        beatsElapsed += cluster.duration;
+      }
     }
 
-    this.setState({notes: notes})
+    this.setState({clusters})
   }
 
-  randomPitch() {
-    return constants.startingNote(this.state.noteRange.value) + constants.randrange(this.state.noteRange.value);
+  bottomPitch() {
+    return startingNote(this.state.noteRange);
   }
 
-  nextPitch(pitch: number): number {
-    const choice = constants.randrange(7);
-    let out = (choice >= 5) ?
-        pitch - 7 + constants.randrange(15)
-        :
-        pitch - 2 + choice;
+  topPitch() {
+    return startingNote(this.state.noteRange) + this.state.noteRange;
+  }
 
-    let sn = constants.startingNote(this.state.noteRange.value);
-    if ((out < sn) || (out >= sn + this.state.noteRange.value)) {
-      return this.nextPitch(pitch);
-    } else {
-      return out;
+  adjustPitch(pitch: number, otherPitches: Set<number>) {
+    pitch = Math.max(pitch, this.bottomPitch(), Math.max(...Array.from(otherPitches)) - 7);
+    pitch = Math.min(pitch, this.topPitch() - 1, Math.min(...Array.from(otherPitches)) + 7);
+    return pitch;
+  }
+
+  inKeyNotes(pitches: Set<number>) {
+    return Array.from(pitches).map(pitch => ({
+      pitch,
+      accidental: inKeyAccidental(this.state.key, pitch),
+    }));
+  }
+
+  randomCluster(): NoteCluster {
+    const { maxVoices, noteDurations, noteRange } = this.state;
+    const numNotes = Math.ceil(Math.pow(Math.random(), .4) * maxVoices);
+
+    const pitches: Set<number> = new Set();
+    while (pitches.size < numNotes) {
+      pitches.add(this.adjustPitch(this.bottomPitch() + randInt(noteRange), pitches))
     }
+
+    return {
+      duration: randElem(noteDurations),
+      notes: this.inKeyNotes(pitches),
+    };
+  }
+
+  nextCluster(cluster: NoteCluster): NoteCluster {
+    let { maxVoices, noteDurations, noteRange } = this.state;
+    let pitches: Set<number> = new Set();
+    for (let note of cluster.notes) {
+      if (Math.random() < 0) { continue; }
+
+      pitches.add(this.adjustPitch(note.pitch - 2 + randInt(5), pitches));
+    }
+
+    if (pitches.size == 0 || (pitches.size < maxVoices && Math.random() < .2)) {
+      pitches.add(this.adjustPitch(this.bottomPitch() + randInt(noteRange), pitches));
+    }
+
+    return {
+      duration: randElem(noteDurations),
+      notes: this.inKeyNotes(pitches),
+    };
   }
 
   getAbc() {
     let notation = "X:1\nT:Notesy\nM:4/4\nL:1/4\nK:" + this.state.key + "\n|";
 
     let beatsElapsed = 0;
-    this.state.notes.map((note, i) => {
+    this.state.clusters.map((cluster, i) => {
       if (i === this.state.position) { notation += "!wedge!"; }
-      notation += constants.toAbcNote(note);
-      beatsElapsed += note.duration;
+      notation += toAbcCluster(cluster, this.state.key);
+      beatsElapsed += cluster.duration;
       if ((beatsElapsed % 4 === 0)) {
         notation += "|";
       }
       if (beatsElapsed % 16 === 0) {
         notation += " \n";
-        if (i + 1 < this.state.notes.length) {
+        if (i + 1 < this.state.clusters.length) {
           notation += "|";
         }
       }
@@ -203,46 +246,52 @@ class App extends Component<{}, State> {
   }
 
   optionsChooser(field: keyof typeof defaultMenuValues) {
-    type T = (typeof defaultMenuValues)[typeof field]['value'];
+    type T = (typeof defaultMenuValues)[typeof field];
 
-    const current: Option<T> = this.state[field];
+    const current: T = this.state[field];
     const options: OptionsMenuInfo<T> = menuInfo[field];
-    const update = (p: Option<T>) => {
-      this.setState({...this.state, [field]: p});
-      this.restart();
+    const update = (p: T) => {
+      this.setState({...this.state, [field]: p}, this.restart.bind(this));
     }
 
-    return <OptionsChooser {...{current, options, update}}/>;
+    return OptionsChooser<T>({current, options, update});
+  }
+
+
+  completionSummary() {
+    if (this.state.finishTime == null) { return null; }
+
+    let accuracy = this.state.correctPresses/this.state.keysPressed;
+    let timeElapsed = (this.state.finishTime - this.state.startTime);
+    let averageBeatTime = Math.floor(timeElapsed/pieceLength)/1000;
+    let score = Math.floor((1/(1.1 - accuracy))*(1/averageBeatTime)*100);
+
+    return (
+      <div>
+        <p>
+          {"Correct presses: "}
+          {this.state.correctPresses}/{this.state.keysPressed}{" "}
+          ({Math.floor(100*accuracy)}% accuracy)
+        </p>
+        <p>
+          {"Time elapsed: "}
+          {Math.floor(timeElapsed/1000)}{" seconds "}
+          ({averageBeatTime} seconds per beat)
+        </p>
+        <p>Score: {score}</p>
+      </div>
+    );
   }
 
 
   render() {
-    let accuracy = this.state.correctPresses/this.state.keysPressed;
-    let timeElapsed = this.state.finishTime - this.state.startTime;
-    let averageBeatTime = Math.floor(timeElapsed/pieceLength)/1000;
-    let score = Math.floor((1/(1.1 - accuracy))*(1/averageBeatTime)*100);
-
     return (
       <div id="app" className="container">
         <div className="row"><div className="col-12">
           <SheetMusic notation={this.getAbc()}/>
         </div></div>
 
-        {this.state.finished ?
-            <div>
-              <p>
-                {"Correct presses: "}
-                {this.state.correctPresses}/{this.state.keysPressed}{" "}
-                ({Math.floor(100*accuracy)}% accuracy)
-              </p>
-              <p>
-                {"Time elapsed: "}
-                {Math.floor(timeElapsed/1000)}{" seconds "}
-                ({averageBeatTime} seconds per beat)
-              </p>
-              <p>Score: {score}</p>
-            </div>
-        : null}
+        {this.completionSummary()}
 
         {this.state.connectionError ?
           <p>Notesy can't gain access to your MIDI inputs right now. Make sure you are using Google Chrome
@@ -255,6 +304,7 @@ class App extends Component<{}, State> {
           {this.optionsChooser('noteRange')}
           {this.optionsChooser('keyPossibilities')}
           {this.optionsChooser('noteDurations')}
+          {this.optionsChooser('maxVoices')}
         </div>
       </div>
     );
