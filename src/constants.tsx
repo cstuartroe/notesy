@@ -154,8 +154,6 @@ function randElems<T>(l: T[], num_elems: number): T[] {
   return Array.from(indexes).map(i => l[i]);
 }
 
-const startingNote = (noteRange: number) => 20 - ((noteRange-1)/2);
-
 function eqSet<T>(as: Set<T>, bs: Set<T>) {
   if (as.size !== bs.size) return false;
   for (let a of Array.from(as)) {
@@ -184,6 +182,5 @@ export {
   randElem,
   randElems,
   range,
-  startingNote,
   eqSet,
 };

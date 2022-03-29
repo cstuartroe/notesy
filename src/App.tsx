@@ -8,14 +8,11 @@ import {
   keyEventCodes,
   toAbcCluster,
   randElem,
-  startingNote,
   RawMidiMessage,
   MidiMessage,
   NoteCluster,
   playableKey,
   toMidiNumber,
-  inKeyAccidental,
-  randInt,
   eqSet,
 } from "./constants";
 
@@ -25,8 +22,6 @@ const defaultMenuValues: {[K in keyof typeof menuInfo]: (typeof menuInfo)[K]['op
   noteDurations: menuInfo.noteDurations.options[0].value,
   maxVoices: menuInfo.maxVoices.options[0].value,
 }
-
-const pieceLength = 32;
 
 type MidiInputDevice = {
   onmidimessage: (m: RawMidiMessage) => void
@@ -146,81 +141,6 @@ class App extends Component<{}, State> {
 
   randKey() {
     return randElem(this.state.keyPossibilities);
-  }
-
-  createNotes() {
-    const clusters: NoteCluster[] = [];
-    let beatsElapsed = 0;
-
-    let lastCluster = this.randomCluster();
-    clusters.push(lastCluster);
-    beatsElapsed += lastCluster.duration;
-
-    while (beatsElapsed < pieceLength) {
-      let cluster = this.nextCluster(lastCluster);
-      if (cluster.duration <= 4 - (beatsElapsed % 4)) {
-        clusters.push(cluster);
-        lastCluster = cluster;
-        beatsElapsed += cluster.duration;
-      }
-    }
-
-    this.setState({clusters})
-  }
-
-  bottomPitch() {
-    return startingNote(this.state.noteRange);
-  }
-
-  topPitch() {
-    return startingNote(this.state.noteRange) + this.state.noteRange;
-  }
-
-  adjustPitch(pitch: number, otherPitches: Set<number>) {
-    pitch = Math.max(pitch, this.bottomPitch(), Math.max(...Array.from(otherPitches)) - 7);
-    pitch = Math.min(pitch, this.topPitch() - 1, Math.min(...Array.from(otherPitches)) + 7);
-    return pitch;
-  }
-
-  inKeyNotes(pitches: Set<number>) {
-    return Array.from(pitches).map(pitch => ({
-      pitch,
-      accidental: inKeyAccidental(this.state.key, pitch),
-    }));
-  }
-
-  randomCluster(): NoteCluster {
-    const { maxVoices, noteDurations, noteRange } = this.state;
-    const numNotes = Math.ceil(Math.pow(Math.random(), .4) * maxVoices);
-
-    const pitches: Set<number> = new Set();
-    while (pitches.size < numNotes) {
-      pitches.add(this.adjustPitch(this.bottomPitch() + randInt(noteRange), pitches))
-    }
-
-    return {
-      duration: randElem(noteDurations),
-      notes: this.inKeyNotes(pitches),
-    };
-  }
-
-  nextCluster(cluster: NoteCluster): NoteCluster {
-    let { maxVoices, noteDurations, noteRange } = this.state;
-    let pitches: Set<number> = new Set();
-    for (let note of cluster.notes) {
-      if (Math.random() < 0) { continue; }
-
-      pitches.add(this.adjustPitch(note.pitch - 2 + randInt(5), pitches));
-    }
-
-    if (pitches.size == 0 || (pitches.size < maxVoices && Math.random() < .2)) {
-      pitches.add(this.adjustPitch(this.bottomPitch() + randInt(noteRange), pitches));
-    }
-
-    return {
-      duration: randElem(noteDurations),
-      notes: this.inKeyNotes(pitches),
-    };
   }
 
   getAbc() {
